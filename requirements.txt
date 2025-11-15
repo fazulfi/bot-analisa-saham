@@ -1,1 +1,8 @@
-pandas\nnumpy\nta\npython-telegram-bot\nsqlalchemy\npytest\npython-dotenv
+pandas
+numpy
+ta
+matplotlib
+python-telegram-bot
+sqlalchemy
+python-dotenv
+pytest
