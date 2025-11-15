@@ -1,0 +1,28 @@
+# Byte-compiled / build
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+build/
+dist/
+*.egg-info/
+
+# Virtualenv
+.env
+.venv/
+venv/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+
+# Data / outputs
+data/
+signals/
+*.sqlite3
+*.db
+
+# OS
+.DS_Store
+Thumbs.db
