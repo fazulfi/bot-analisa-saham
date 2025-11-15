@@ -1,0 +1,1 @@
+pandas\nnumpy\nta\npython-telegram-bot\nsqlalchemy\npytest\npython-dotenv
