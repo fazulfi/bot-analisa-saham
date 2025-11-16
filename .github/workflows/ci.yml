@@ -36,12 +36,15 @@ jobs:
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
           pip install pytest
 
-      - name: Install package (editable)
+      - name: Install package (editable) + dev deps
         run: |
-          # make the repo importable during CI so tests can `import bot_analisa.*`
-          python -m pip install -e .
+          # install editable + dev extras if defined
+          python -m pip install -e .[dev] || python -m pip install -e .
 
       - name: Run tests
+        # set PYTHONPATH so src/ is importable even if packaging misses something
+        env:
+          PYTHONPATH: "${{ github.workspace }}/src"
         run: |
           pytest -q --maxfail=1
 
