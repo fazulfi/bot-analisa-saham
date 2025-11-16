@@ -60,29 +60,32 @@ def atr(df: pd.DataFrame, period: int = 14) -> pd.Series:
 
 def rsi(series: pd.Series, period: int = 14) -> pd.Series:
     """
-    RSI using Welles Wilder method:
+    RSI using Welles Wilder (RMA) implemented via EWM with alpha = 1/period.
+    This implementation matches common libraries like `ta` (RSIIndicator).
+    Steps:
       - compute delta
-      - gains = positive deltas, losses = -negative deltas
-      - first avg_gain = mean(gains[:period]), first avg_loss = mean(losses[:period])
-      - subsequent avg_gain = (prev_avg_gain*(period-1) + gain)/period
-      - RSI = 100 - (100/(1 + RS)) where RS = avg_gain/avg_loss
+      - gain = positive deltas, loss = -negative deltas
+      - apply RMA = ewm(alpha=1/period, adjust=False).mean() with min_periods=period
+      - RSI = 100 - 100 / (1 + RS)
     """
-    delta = series.diff()
-    gain = delta.clip(lower=0.0)
-    loss = -delta.clip(upper=0.0)
+    # ensure float series
+    s = series.astype("float64", copy=False)
 
-    avg_gain = pd.Series(index=series.index, dtype="float64")
-    avg_loss = pd.Series(index=series.index, dtype="float64")
+    delta = s.diff()
 
-    if len(series) >= period:
-        avg_gain.iloc[period - 1] = gain.iloc[:period].mean()
-        avg_loss.iloc[period - 1] = loss.iloc[:period].mean()
-        for i in range(period, len(series)):
-            avg_gain.iloc[i] = (avg_gain.iloc[i - 1] * (period - 1) + gain.iloc[i]) / period
-            avg_loss.iloc[i] = (avg_loss.iloc[i - 1] * (period - 1) + loss.iloc[i]) / period
+    gain = delta.clip(lower=0.0).fillna(0.0)
+    loss = -delta.clip(upper=0.0).fillna(0.0)
 
+    # Wilder's smoothing via ewm with alpha = 1/period; min_periods=period to require warmup
+    avg_gain = gain.ewm(alpha=1.0/period, adjust=False, min_periods=period).mean()
+    avg_loss = loss.ewm(alpha=1.0/period, adjust=False, min_periods=period).mean()
+
+    # RS and RSI
     rs = avg_gain / avg_loss
-    rsi = 100 - (100 / (1 + rs))
+    # avoid division by zero
+    rs_safe = rs.replace([np.inf, -np.inf], np.nan)
+    rsi = 100 - (100 / (1 + rs_safe))
+
     return rsi
 
 def macd(series: pd.Series, fast: int = 12, slow: int = 26, signal: int = 9):
