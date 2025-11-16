@@ -7,7 +7,6 @@ on:
     branches: [ main ]
 
 env:
-  # biar Python import package lokal dari src/ di runner
   PYTHONPATH: ${{ github.workspace }}/src
 
 jobs:
@@ -15,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: [3.10, 3.11]   # atau [3.11] saja kalau mau lebih singkat
+        python-version: [ '3.10', '3.11' ]
 
     steps:
       - name: Checkout repo
@@ -38,7 +37,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-          # try editable with dev extras first (same as local: pip install -e ".[dev]")
+          # try editable install with dev extras first (works locally & in CI)
           python -m pip install -e ".[dev]" || python -m pip install -e . || true
           python -m pip install pytest
 
@@ -47,9 +46,8 @@ jobs:
           echo "=== pwd ==="; pwd
           echo "=== list top-level ==="; ls -la
           echo "=== list src/ ==="; ls -la src || true
-          echo "=== python version / sys.path ==="
           python - <<'PY'
-import sys, pkgutil, importlib.util
+import sys, pkgutil, importlib.util, os
 print("python:", sys.version)
 print("sys.path (first 10):")
 for p in sys.path[:10]:
@@ -64,6 +62,8 @@ PY
       - name: Run tests
         run: |
           pytest -q --maxfail=1
+        # generate junit xml for CI artifacts (optional)
+        # if you use upload-artifact later, uncomment/adjust
 
       - name: Upload test results (junit)
         if: always()
