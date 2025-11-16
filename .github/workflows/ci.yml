@@ -7,6 +7,7 @@ on:
     branches: [ main ]
 
 env:
+  # biar Python import package lokal dari src/ di runner
   PYTHONPATH: ${{ github.workspace }}/src
 
 jobs:
@@ -14,13 +15,13 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: [ '3.11' ]
+        python-version: [3.10, 3.11]   # atau [3.11] saja kalau mau lebih singkat
 
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Set up Python
+      - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v4
         with:
           python-version: ${{ matrix.python-version }}
@@ -37,45 +38,36 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-          # try editable with dev extras first; fall back to editable without extras
-          pip install -e ".[dev]" || pip install -e . || true
-          pip install pytest
+          # try editable with dev extras first (same as local: pip install -e ".[dev]")
+          python -m pip install -e ".[dev]" || python -m pip install -e . || true
+          python -m pip install pytest
 
       - name: DEBUG: inspect repo + python env before tests
         run: |
-          echo "=== pwd ==="
-          pwd
-          echo
-          echo "=== list top-level ==="
-          ls -la
-          echo
-          echo "=== list src/ ==="
-          ls -la src || true
-          echo
+          echo "=== pwd ==="; pwd
+          echo "=== list top-level ==="; ls -la
+          echo "=== list src/ ==="; ls -la src || true
           echo "=== python version / sys.path ==="
           python - <<'PY'
-import sys, pkgutil, importlib.util, os, pathlib
+import sys, pkgutil, importlib.util
 print("python:", sys.version)
-print("\nsys.path (first 10):")
+print("sys.path (first 10):")
 for p in sys.path[:10]:
-    print("  ", p)
-print("\npkgutil.iter_modules(['src']):")
+    print(" ", p)
+print()
+print("pkgutil.iter_modules(['src']):")
 print(list(pkgutil.iter_modules(['src'])))
 spec = importlib.util.find_spec("bot_analisa")
-print("\nfind_spec('bot_analisa') ->", spec)
-if os.path.isdir("src/bot_analisa"):
-    print("\nsrc/bot_analisa exists, listing tree:")
-    for p in pathlib.Path("src/bot_analisa").rglob("*"):
-        print("  ", p)
+print("find_spec('bot_analisa') ->", spec)
 PY
 
-      - name: Run tests (pytest) and produce junit xml
+      - name: Run tests
         run: |
-          pytest -q --maxfail=1 --junitxml=pytest-report.xml
+          pytest -q --maxfail=1
 
       - name: Upload test results (junit)
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: pytest-report
-          path: pytest-report.xml
+          path: ./pytest-report.xml
