@@ -1,11 +1,13 @@
 name: CI
 
+# jalankan untuk push ke main / feat/* dan untuk PR ke main
 on:
   push:
-    branches: [ main, feat/* ]
+    branches: [ main, 'feat/*' ]
   pull_request:
     branches: [ main ]
 
+# pastikan Python dapat menemukan package di src/
 env:
   PYTHONPATH: ${{ github.workspace }}/src
 
@@ -14,6 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
+        # gunakan versi Python yang valid pada runner
         python-version: [ '3.11' ]
 
     steps:
@@ -33,27 +36,24 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pip-
 
-      - name: Install deps
+      - name: Install deps (editable + dev if available)
         run: |
           python -m pip install --upgrade pip
+          # install requirements if provided (optional)
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          # first try to install editable with dev extras (if defined), else fallback
+          pip install -e ".[dev]" || pip install -e . || true
+          # ensure pytest is available
           pip install pytest
 
-      - name: Install package (editable) + dev deps
+      - name: Run tests (pytest)
         run: |
-          # install editable + dev extras if defined
-          python -m pip install -e .[dev] || python -m pip install -e .
-
-      - name: Run tests
-        # set PYTHONPATH so src/ is importable even if packaging misses something
-        env:
-          PYTHONPATH: "${{ github.workspace }}/src"
-        run: |
-          pytest -q --maxfail=1
+          # create junit xml for CI artifacts
+          pytest -q --maxfail=1 --junitxml=pytest-report.xml
 
       - name: Upload test results (junit)
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: pytest-report
-          path: ./pytest-report.xml
+          path: pytest-report.xml
