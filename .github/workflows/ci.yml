@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: [ '3.10', '3.11' ]
+        python-version: [ '3.11' ]
 
     steps:
       - name: Checkout repo
@@ -41,29 +41,16 @@ jobs:
           python -m pip install -e ".[dev]" || python -m pip install -e . || true
           python -m pip install pytest
 
-      - name: DEBUG: inspect repo + python env before tests
+      - name: DEBUG: quick repo + python info
         run: |
-          echo "=== pwd ==="; pwd
-          echo "=== list top-level ==="; ls -la
-          echo "=== list src/ ==="; ls -la src || true
-          python - <<'PY'
-import sys, pkgutil, importlib.util, os
-print("python:", sys.version)
-print("sys.path (first 10):")
-for p in sys.path[:10]:
-    print(" ", p)
-print()
-print("pkgutil.iter_modules(['src']):")
-print(list(pkgutil.iter_modules(['src'])))
-spec = importlib.util.find_spec("bot_analisa")
-print("find_spec('bot_analisa') ->", spec)
-PY
+          echo "PWD:"; pwd
+          echo "Top-level:"; ls -la || true
+          echo "src:"; ls -la src || true
+          python -c "import sys, pkgutil; print('python', sys.version); print('sys.path[:10]=', sys.path[:10]); print('pkgutil.iter_modules([\"src\"])=', list(pkgutil.iter_modules(['src'])))"
 
       - name: Run tests
         run: |
           pytest -q --maxfail=1
-        # generate junit xml for CI artifacts (optional)
-        # if you use upload-artifact later, uncomment/adjust
 
       - name: Upload test results (junit)
         if: always()
