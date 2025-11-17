@@ -2,26 +2,23 @@ name: CI
 
 on:
   push:
-    branches: [ main, 'feat/*' ]
+    branches: [ main, "feat/*" ]
   pull_request:
     branches: [ main ]
-
-env:
-  # biar Python import package lokal dari src/ di runner
-  PYTHONPATH: ${{ github.workspace }}/src
 
 jobs:
   test:
     runs-on: ubuntu-latest
+
     strategy:
       matrix:
-        python-version: [3.10, 3.11]   # atau [3.11] saja kalau mau lebih singkat
+        python-version: [ "3.10", "3.11" ]
 
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Set up Python ${{ matrix.python-version }}
+      - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: ${{ matrix.python-version }}
@@ -34,32 +31,21 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pip-
 
-      - name: Install deps (editable + dev if available)
+      - name: Install deps (editable + dev)
         run: |
           python -m pip install --upgrade pip
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-          # try editable with dev extras first (same as local: pip install -e ".[dev]")
-          python -m pip install -e ".[dev]" || python -m pip install -e . || true
-          python -m pip install pytest
+          python -m pip install -e .[dev] || python -m pip install -e .
 
-      - name: DEBUG: inspect repo + python env before tests
+      - name: Verify installed package
         run: |
-          echo "=== pwd ==="; pwd
-          echo "=== list top-level ==="; ls -la
-          echo "=== list src/ ==="; ls -la src || true
-          echo "=== python version / sys.path ==="
-          python - <<'PY'
-import sys, pkgutil, importlib.util
-print("python:", sys.version)
-print("sys.path (first 10):")
-for p in sys.path[:10]:
-    print(" ", p)
-print()
-print("pkgutil.iter_modules(['src']):")
-print(list(pkgutil.iter_modules(['src'])))
-spec = importlib.util.find_spec("bot_analisa")
-print("find_spec('bot_analisa') ->", spec)
-PY
+          echo "=== Installed bot-analisa ==="
+          python -m pip show bot-analisa || true
+          echo "=== Import check ==="
+          python - <<EOF
+import bot_analisa, bot_analisa.data
+print("OK: bot_analisa imported")
+EOF
 
       - name: Run tests
         run: |
@@ -70,4 +56,4 @@ PY
         uses: actions/upload-artifact@v4
         with:
           name: pytest-report
-          path: ./pytest-report.xml
+          path: pytest-report.xml
