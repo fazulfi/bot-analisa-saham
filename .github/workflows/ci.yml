@@ -12,34 +12,60 @@ env:
 jobs:
   test:
     runs-on: ubuntu-latest
-
     strategy:
       matrix:
-        python-version: ['3.11']
+        python-version: [ '3.10', '3.11' ]
 
     steps:
-    - name: Checkout repo
-      uses: actions/checkout@v4
+      - name: Checkout repo
+        uses: actions/checkout@v4
 
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: ${{ matrix.python-version }}
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
 
-    - name: Cache pip
-      uses: actions/cache@v4
-      with:
-        path: ~/.cache/pip
-        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
-        restore-keys: |
-          ${{ runner.os }}-pip-
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
 
-    - name: Install deps (editable + dev)
-      run: |
-        python -m pip install --upgrade pip
-        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-        pip install -e .[dev] || pip install -e .
+      - name: Install deps (editable + dev if available)
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          pip install -e ".[dev]" || pip install -e . || true
+          python -m pip install pytest
 
-    - name: Run tests
-      run: |
-        pytest -q --maxfail=1
+      - name: Verify installed package (debug)
+        run: |
+          echo "=== pip show bot-analisa ==="
+          python -m pip show bot-analisa || true
+          echo
+          echo "=== import checks (bot_analisa, bot_analisa.data) ==="
+          python - <<'PY'
+import importlib, pkgutil, sys
+print("python:", sys.version.splitlines()[0])
+print("sys.path (first 10):")
+for p in sys.path[:10]:
+    print("  ", p)
+print()
+print("find_spec bot_analisa ->", importlib.util.find_spec("bot_analisa"))
+print("find_spec bot_analisa.data ->", importlib.util.find_spec("bot_analisa.data"))
+print()
+print("pkgutil.iter_modules(['src']) ->", list(pkgutil.iter_modules(['src'])))
+PY
+
+      - name: Run tests
+        run: |
+          pytest -q --maxfail=1
+
+      - name: Upload test results (junit)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pytest-report
+          path: ./pytest-report.xml
