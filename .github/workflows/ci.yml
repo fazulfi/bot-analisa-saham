@@ -45,12 +45,12 @@ jobs:
 
           echo "---- python version and sys.path ----"
           python - <<'PY'
-import importlib.util, pkgutil, sys
-print("sys.path (top 10):", sys.path[:10])
-print("find_spec bot_analisa ->", importlib.util.find_spec("bot_analisa"))
-print("find_spec bot_analisa.data ->", importlib.util.find_spec("bot_analisa.data"))
-print("modules in src ->", list(pkgutil.iter_modules(['src'])))
-PY
+      import importlib.util, pkgutil, sys
+      print("sys.path (top 10):", sys.path[:10])
+      print("find_spec bot_analisa ->", importlib.util.find_spec("bot_analisa"))
+      print("find_spec bot_analisa.data ->", importlib.util.find_spec("bot_analisa.data"))
+      print("modules in src ->", list(pkgutil.iter_modules(['src'])))
+      PY
 
       - name: Run tests
         run: |
