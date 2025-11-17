@@ -2,25 +2,23 @@ name: CI
 
 on:
   push:
-    branches: [ main, 'feat/*' ]
+    branches: [ main, "feat/*" ]
   pull_request:
     branches: [ main ]
-
-env:
-  PYTHONPATH: ${{ github.workspace }}/src
 
 jobs:
   test:
     runs-on: ubuntu-latest
+
     strategy:
       matrix:
-        python-version: [ '3.10', '3.11' ]
+        python-version: [ "3.10", "3.11" ]
 
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Set up Python ${{ matrix.python-version }}
+      - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: ${{ matrix.python-version }}
@@ -33,31 +31,21 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pip-
 
-      - name: Install deps (editable + dev if available)
+      - name: Install deps (editable + dev)
         run: |
           python -m pip install --upgrade pip
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-          pip install -e ".[dev]" || pip install -e . || true
-          python -m pip install pytest
+          python -m pip install -e .[dev] || python -m pip install -e .
 
-      - name: Verify installed package (debug)
+      - name: Verify installed package
         run: |
-          echo "=== pip show bot-analisa ==="
+          echo "=== Installed bot-analisa ==="
           python -m pip show bot-analisa || true
-          echo
-          echo "=== import checks (bot_analisa, bot_analisa.data) ==="
-          python - <<'PY'
-import importlib, pkgutil, sys
-print("python:", sys.version.splitlines()[0])
-print("sys.path (first 10):")
-for p in sys.path[:10]:
-    print("  ", p)
-print()
-print("find_spec bot_analisa ->", importlib.util.find_spec("bot_analisa"))
-print("find_spec bot_analisa.data ->", importlib.util.find_spec("bot_analisa.data"))
-print()
-print("pkgutil.iter_modules(['src']) ->", list(pkgutil.iter_modules(['src'])))
-PY
+          echo "=== Import check ==="
+          python - <<EOF
+import bot_analisa, bot_analisa.data
+print("OK: bot_analisa imported")
+EOF
 
       - name: Run tests
         run: |
@@ -68,4 +56,4 @@ PY
         uses: actions/upload-artifact@v4
         with:
           name: pytest-report
-          path: ./pytest-report.xml
+          path: pytest-report.xml
