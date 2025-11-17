@@ -40,25 +40,6 @@ jobs:
           pip install -e ".[dev]" || pip install -e . || true
           python -m pip install pytest
 
-      - name: Verify installed package (debug)
-        run: |
-          echo "=== pip show bot-analisa ==="
-          python -m pip show bot-analisa || true
-          echo
-          echo "=== import checks (bot_analisa, bot_analisa.data) ==="
-          python - <<'PY'
-import importlib, pkgutil, sys
-print("python:", sys.version.splitlines()[0])
-print("sys.path (first 10):")
-for p in sys.path[:10]:
-    print("  ", p)
-print()
-print("find_spec bot_analisa ->", importlib.util.find_spec("bot_analisa"))
-print("find_spec bot_analisa.data ->", importlib.util.find_spec("bot_analisa.data"))
-print()
-print("pkgutil.iter_modules(['src']) ->", list(pkgutil.iter_modules(['src'])))
-PY
-
       - name: Run tests
         run: |
           pytest -q --maxfail=1
