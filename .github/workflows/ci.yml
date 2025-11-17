@@ -41,6 +41,20 @@ jobs:
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
         python -m pip install -e .[dev] || python -m pip install -e .
 
+    - name: Verify installed package (debug)
+      run: |
+        echo "---- pip show bot-analisa ----"
+        python -m pip show bot-analisa || true
+        echo
+        echo "---- find_spec bot_analisa ----"
+        python - <<'PY'
+import importlib.util, pkgutil, sys, pprint
+print("sys.executable:", sys.executable)
+print("sys.path (first 10):", sys.path[:10])
+print("find_spec bot_analisa ->", importlib.util.find_spec("bot_analisa"))
+print("pkgutil.iter_modules(['src']) ->", list(pkgutil.iter_modules(['src'])))
+PY
+
     - name: Run tests
       run: |
         pytest -q --maxfail=1
