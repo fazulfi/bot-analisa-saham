@@ -1,4 +1,4 @@
-name: CI Minimal
+name: CI Debug
 
 on:
   push:
@@ -33,10 +33,24 @@ jobs:
       - name: Install deps (editable)
         run: |
           python -m pip install --upgrade pip
-          # try editable with dev extras first (if you have extras)
+          # try editable with dev extras first (works locally & in CI if extras exist)
           python -m pip install -e ".[dev]" || python -m pip install -e . || true
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
           python -m pip install pytest
+
+      - name: Verify installed package & python env (debug)
+        run: |
+          echo "---- pip show bot-analisa ----"
+          python -m pip show bot-analisa || true
+
+          echo "---- python version and sys.path ----"
+          python - <<'PY'
+import importlib.util, pkgutil, sys
+print("sys.path (top 10):", sys.path[:10])
+print("find_spec bot_analisa ->", importlib.util.find_spec("bot_analisa"))
+print("find_spec bot_analisa.data ->", importlib.util.find_spec("bot_analisa.data"))
+print("modules in src ->", list(pkgutil.iter_modules(['src'])))
+PY
 
       - name: Run tests
         run: |
