@@ -1,0 +1,3 @@
+key,side,ticker,entry_time,entry_price,exit_time,exit_price,status
+||2025-11-17T09:30:00Z,engine,,2025-11-17T09:30:00Z,1000.0,,,
+||2025-11-17T09:31:00Z,engine,,2025-11-17T09:31:00Z,1010.0,,,
