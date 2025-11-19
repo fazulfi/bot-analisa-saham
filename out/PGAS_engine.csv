@@ -1,0 +1,3 @@
+timestamp,side,price,qty
+2025-11-17T09:30:00Z,buy,1000,10
+2025-11-17T09:31:00Z,sell,1010,5

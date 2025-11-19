@@ -15,4 +15,4 @@ package-dir = {"" = "src"}
 
 [tool.setuptools.packages.find]
 where = ["src"]
-include = ["bot_analisa*"]
+include = ["bot_analisa*", "scripts*", "*"]
