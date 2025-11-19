@@ -1,0 +1,35 @@
+*** Begin Patch
+*** Update File: .github/workflows/ci.yml
+@@
+     steps:
+       - name: Checkout repo
+         uses: actions/checkout@v4
+ 
+       - name: Set up Python ${{ matrix.python-version }}
+         uses: actions/setup-python@v4
+         with:
+           python-version: ${{ matrix.python-version }}
+ 
+       - name: Cache pip
+         uses: actions/cache@v4
+         with:
+           path: ~/.cache/pip
+           key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+           restore-keys: |
+             ${{ runner.os }}-pip-
+ 
+       - name: Install deps
+         run: |
+           python -m pip install --upgrade pip
+           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+           pip install pytest
+ 
++      - name: Install package (editable)
++        run: |
++          # make the repo importable during CI so tests can `import bot_analisa.*`
++          python -m pip install -e .
++
+       - name: Run tests
+         run: |
+           pytest -q --maxfail=1
+*** End Patch
