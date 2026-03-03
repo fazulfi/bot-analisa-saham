@@ -169,14 +169,15 @@ def generate_signals(df: pd.DataFrame, params: Dict = None) -> List[Dict]:
 
     # fallback permissive if no strict signals
     if len(signals) == 0 and permissive_fallback and permissive_count > 0:
-        # use last few permissive candidates
-        for idx, row in permissive_candidates[-10:]:
-            try:
-                close = float(row["Close"])
-                atr = float(row.get(atr_col, 0.0)) if not pd.isna(row.get(atr_col, 0.0)) else 0.0
-            except Exception:
-                continue
+        # use only the most recent permissive candidate
+        idx, row = permissive_candidates[-1]
+        try:
+            close = float(row["Close"])
+            atr = float(row.get(atr_col, 0.0)) if not pd.isna(row.get(atr_col, 0.0)) else 0.0
+        except Exception:
+            close = None
 
+        if close is not None:
             if use_atr_sl and atr > 0:
                 tp = close + tp_atr * atr
                 sl = close - sl_atr * atr

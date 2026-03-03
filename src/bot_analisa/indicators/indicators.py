@@ -114,7 +114,7 @@ def compute_indicators(df: pd.DataFrame,
     sma_periods = sma_periods or [20, 50]
     ema_periods = ema_periods or [9, 21]
 
-    out = df.copy().reset_index(drop=True)
+    out = df.copy()
     # assume columns: Datetime, Open, High, Low, Close, Volume
     if "Close" not in out.columns:
         raise ValueError("DataFrame must contain 'Close' column")

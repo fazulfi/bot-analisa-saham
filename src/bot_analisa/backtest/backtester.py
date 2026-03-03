@@ -73,15 +73,19 @@ class Backtester:
                 except Exception:
                     continue
 
-            entry_price = float(s["entry"])
-            # compute TP/SL - try using risk module if available
-            try:
-                from bot_analisa.risk import compute_tp_sl
-                tp, sl = compute_tp_sl(entry_price, atr=s.get("ATR_14", None), params=s.get("risk_params", {}))
-            except Exception:
-                # fallback simple fixed percent (5% TP / 2% SL)
-                tp = entry_price * 1.05
-                sl = entry_price * 0.98
+            entry_price = float(s.get("entry", s.get("entry_price")))
+            # Prefer TP/SL produced by strategy; fallback to risk module only when missing.
+            if ("tp" in s) and ("sl" in s):
+                tp = float(s["tp"])
+                sl = float(s["sl"])
+            else:
+                try:
+                    from bot_analisa.risk import compute_tp_sl
+                    tp, sl = compute_tp_sl(entry_price, atr=s.get("ATR_14", None), params=s.get("risk_params", {}))
+                except Exception:
+                    # fallback simple fixed percent (5% TP / 2% SL)
+                    tp = entry_price * 1.05
+                    sl = entry_price * 0.98
 
             df_future = df[df.index >= entry_idx]
 
@@ -197,7 +201,13 @@ class Backtester:
                         gross_win = sum(t["result"] for t in val_trade_results if t["result"] > 0)
                         gross_loss = abs(sum(t["result"] for t in val_trade_results if t["result"] < 0))
                         pf = (gross_win / gross_loss) if gross_loss > 0 else float("inf")
-                        max_dd = max(0, max([0]))  # placeholder, we didn't compute fold equity curve
+                        fold_equity = 0.0
+                        peak_equity = 0.0
+                        max_dd = 0.0
+                        for t in val_trade_results:
+                            fold_equity += float(t["result"])
+                            peak_equity = max(peak_equity, fold_equity)
+                            max_dd = max(max_dd, peak_equity - fold_equity)
                         metrics.append({"winrate": winrate, "pf": pf, "trades": total, "max_dd": max_dd})
 
                     split_point = split_point + window_delta
