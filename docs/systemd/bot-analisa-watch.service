@@ -1,0 +1,14 @@
+[Unit]
+Description=Bot Analisa Saham - Watch OPEN signals and update TP/SL
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/bot-analisa-saham
+Environment=PYTHONPATH=/opt/bot-analisa-saham/src
+ExecStart=/usr/bin/python3 -m bot_analisa.cli.watch_signals --loop --interval 300 --data-folder /opt/bot-analisa-saham/data --signals-folder /opt/bot-analisa-saham/signals
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
