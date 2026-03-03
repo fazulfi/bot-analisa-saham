@@ -15,7 +15,7 @@ def main() -> None:
     p.add_argument("--signals-folder", default="signals")
     p.add_argument("--once", action="store_true")
     p.add_argument("--loop", action="store_true")
-    p.add_argument("--interval", type=int, default=30)
+    p.add_argument("--interval", type=int, default=300)
     args = p.parse_args()
 
     tickers = [t.strip() for t in args.tickers.split(",")] if args.tickers else None

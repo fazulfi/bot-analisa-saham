@@ -1,0 +1,9 @@
+[Unit]
+Description=Bot Analisa Saham - EOD signal generation
+After=network.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/bot-analisa-saham
+Environment=PYTHONPATH=/opt/bot-analisa-saham/src
+ExecStart=/usr/bin/python3 -m bot_analisa.cli.generate_signals BBCA.JK BBRI.JK BMRI.JK TLKM.JK --period 1y --interval 1d --data-folder /opt/bot-analisa-saham/data --signals-folder /opt/bot-analisa-saham/signals
