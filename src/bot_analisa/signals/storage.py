@@ -1,12 +1,10 @@
 from __future__ import annotations
 
-from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-import tempfile
+import sqlite3
 import uuid
 
-import fcntl
 import pandas as pd
 
 
@@ -17,43 +15,100 @@ DEFAULT_COLUMNS = [
 
 
 class SignalStorage:
+    """SQLite-backed signal storage.
+
+    The constructor keeps the existing `folder` API and stores DB at `<folder>/signals.db`.
+    """
+
     def __init__(self, folder: str = "signals") -> None:
         self.folder = Path(folder)
         self.folder.mkdir(parents=True, exist_ok=True)
+        self.db_path = self.folder / "signals.db"
+        self._init_db()
+        self._migrate_csv_files()
 
-    def _path(self, ticker: str) -> Path:
-        return self.folder / f"{ticker}.csv"
+    def _connect(self) -> sqlite3.Connection:
+        conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row
+        return conn
 
-    @contextmanager
-    def _file_lock(self, ticker: str):
-        lock_path = self.folder / f"{ticker}.lock"
-        lock_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(lock_path, "a+") as lock_file:
-            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+    def _init_db(self) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS signals (
+                    id TEXT PRIMARY KEY,
+                    ticker TEXT NOT NULL,
+                    timestamp TEXT NOT NULL,
+                    entry_price REAL NOT NULL,
+                    tp REAL NOT NULL,
+                    sl REAL NOT NULL,
+                    signal TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    status_info TEXT,
+                    strategy_version TEXT,
+                    reason TEXT,
+                    updated_at TEXT
+                )
+                """
+            )
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_signals_ticker ON signals(ticker)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_signals_status ON signals(status)")
+
+    def _migrate_csv_files(self) -> None:
+        csv_files = sorted(self.folder.glob("*.csv"))
+        if not csv_files:
+            return
+
+        for csv_file in csv_files:
             try:
-                yield
-            finally:
-                fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+                df = pd.read_csv(csv_file)
+            except Exception:
+                continue
 
-    def _load_unlocked(self, ticker: str) -> pd.DataFrame:
-        path = self._path(ticker)
-        if not path.exists():
-            return pd.DataFrame(columns=DEFAULT_COLUMNS)
+            if df.empty:
+                continue
 
-        df = pd.read_csv(path)
-        if "entry" in df.columns and "entry_price" not in df.columns:
-            df["entry_price"] = df["entry"]
-        if "entry" in df.columns:
-            df = df.drop(columns=["entry"])
-        return df
+            if "ticker" not in df.columns:
+                df["ticker"] = csv_file.stem
+            if "entry_price" not in df.columns and "entry" in df.columns:
+                df["entry_price"] = df["entry"]
 
-    def _save_unlocked(self, ticker: str, df: pd.DataFrame) -> None:
-        path = self._path(ticker)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        with tempfile.NamedTemporaryFile("w", delete=False, dir=str(path.parent), suffix=".tmp") as tmp:
-            df.to_csv(tmp.name, index=False)
-            tmp_path = Path(tmp.name)
-        tmp_path.replace(path)
+            now = datetime.now(timezone.utc).isoformat()
+            rows = []
+            for _, row in df.iterrows():
+                try:
+                    rows.append(
+                        (
+                            str(row.get("id") or uuid.uuid4()),
+                            str(row.get("ticker") or csv_file.stem),
+                            str(row.get("timestamp") or now),
+                            float(row.get("entry_price")),
+                            float(row.get("tp")),
+                            float(row.get("sl")),
+                            str(row.get("signal") or row.get("side") or "BUY"),
+                            str(row.get("status") or "OPEN"),
+                            str(row.get("status_info") or ""),
+                            str(row.get("strategy_version") or "unknown"),
+                            str(row.get("reason") or ""),
+                            str(row.get("updated_at") or ""),
+                        )
+                    )
+                except Exception:
+                    continue
+
+            if not rows:
+                continue
+
+            with self._connect() as conn:
+                conn.executemany(
+                    """
+                    INSERT OR IGNORE INTO signals
+                    (id, ticker, timestamp, entry_price, tp, sl, signal, status, status_info, strategy_version, reason, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    rows,
+                )
 
     def save_signal_dict(self, signal: dict) -> dict:
         ticker = signal["ticker"]
@@ -70,11 +125,18 @@ class SignalStorage:
             "status_info": signal.get("status_info", ""),
             "strategy_version": signal.get("strategy_version", "unknown"),
             "reason": signal.get("reason", ""),
+            "updated_at": signal.get("updated_at", ""),
         }
-        with self._file_lock(ticker):
-            df = self._load_unlocked(ticker)
-            df = pd.concat([df, pd.DataFrame([record])], ignore_index=True)
-            self._save_unlocked(ticker, df)
+
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO signals
+                (id, ticker, timestamp, entry_price, tp, sl, signal, status, status_info, strategy_version, reason, updated_at)
+                VALUES (:id, :ticker, :timestamp, :entry_price, :tp, :sl, :signal, :status, :status_info, :strategy_version, :reason, :updated_at)
+                """,
+                record,
+            )
         return record
 
     def add_signal(self, ticker: str, entry_price: float, tp: float, sl: float, strategy_version: str = "v1", **kwargs) -> dict:
@@ -89,36 +151,44 @@ class SignalStorage:
         return self.save_signal_dict(sig)
 
     def list_signals(self, ticker: str | None = None, status: str | None = None) -> pd.DataFrame:
-        if ticker:
-            with self._file_lock(ticker):
-                df = self._load_unlocked(ticker)
-            if status:
-                return df[df["status"] == status].copy()
-            return df
+        query = "SELECT * FROM signals"
+        clauses = []
+        params: list[str] = []
+        if ticker is not None:
+            clauses.append("ticker = ?")
+            params.append(str(ticker))
+        if status is not None:
+            clauses.append("status = ?")
+            params.append(str(status))
+        if clauses:
+            query += " WHERE " + " AND ".join(clauses)
+        query += " ORDER BY timestamp, id"
 
-        files = sorted(self.folder.glob("*.csv"))
-        if not files:
+        with self._connect() as conn:
+            df = pd.read_sql_query(query, conn, params=params)
+
+        if df.empty:
             return pd.DataFrame(columns=DEFAULT_COLUMNS)
-        frames = []
-        for f in files:
-            symbol = f.stem
-            with self._file_lock(symbol):
-                frames.append(self._load_unlocked(symbol))
-        all_df = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame(columns=DEFAULT_COLUMNS)
-        if status:
-            all_df = all_df[all_df["status"] == status]
-        return all_df
+
+        for col in DEFAULT_COLUMNS:
+            if col not in df.columns:
+                df[col] = ""
+        return df[DEFAULT_COLUMNS]
 
     def update_signal_status(self, ticker: str, signal_id: str, new_status: str, status_info: str = "") -> bool:
-        with self._file_lock(ticker):
-            df = self._load_unlocked(ticker)
-            if df.empty or "id" not in df.columns:
-                return False
-            mask = df["id"].astype(str) == str(signal_id)
-            if not mask.any():
-                return False
-            df.loc[mask, "status"] = new_status
-            df.loc[mask, "status_info"] = status_info
-            df.loc[mask, "updated_at"] = datetime.now(timezone.utc).isoformat()
-            self._save_unlocked(ticker, df)
-        return True
+        with self._connect() as conn:
+            cur = conn.execute(
+                """
+                UPDATE signals
+                SET status = ?, status_info = ?, updated_at = ?
+                WHERE ticker = ? AND id = ?
+                """,
+                (
+                    str(new_status),
+                    str(status_info),
+                    datetime.now(timezone.utc).isoformat(),
+                    str(ticker),
+                    str(signal_id),
+                ),
+            )
+            return cur.rowcount > 0
