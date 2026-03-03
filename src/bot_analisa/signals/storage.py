@@ -15,21 +15,20 @@ DEFAULT_COLUMNS = [
 
 
 class SignalStorage:
-    """SQLite-backed signal storage.
-
-    The constructor keeps the existing `folder` API and stores DB at `<folder>/signals.db`.
-    """
+    """SQLite-backed signal storage (`<folder>/signals.db`)."""
 
     def __init__(self, folder: str = "signals") -> None:
         self.folder = Path(folder)
         self.folder.mkdir(parents=True, exist_ok=True)
         self.db_path = self.folder / "signals.db"
         self._init_db()
-        self._migrate_csv_files()
 
     def _connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.db_path)
+        conn = sqlite3.connect(self.db_path, timeout=30)
         conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA journal_mode=WAL;")
+        conn.execute("PRAGMA synchronous=NORMAL;")
+        conn.execute("PRAGMA busy_timeout=30000;")
         return conn
 
     def _init_db(self) -> None:
@@ -54,61 +53,7 @@ class SignalStorage:
             )
             conn.execute("CREATE INDEX IF NOT EXISTS idx_signals_ticker ON signals(ticker)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_signals_status ON signals(status)")
-
-    def _migrate_csv_files(self) -> None:
-        csv_files = sorted(self.folder.glob("*.csv"))
-        if not csv_files:
-            return
-
-        for csv_file in csv_files:
-            try:
-                df = pd.read_csv(csv_file)
-            except Exception:
-                continue
-
-            if df.empty:
-                continue
-
-            if "ticker" not in df.columns:
-                df["ticker"] = csv_file.stem
-            if "entry_price" not in df.columns and "entry" in df.columns:
-                df["entry_price"] = df["entry"]
-
-            now = datetime.now(timezone.utc).isoformat()
-            rows = []
-            for _, row in df.iterrows():
-                try:
-                    rows.append(
-                        (
-                            str(row.get("id") or uuid.uuid4()),
-                            str(row.get("ticker") or csv_file.stem),
-                            str(row.get("timestamp") or now),
-                            float(row.get("entry_price")),
-                            float(row.get("tp")),
-                            float(row.get("sl")),
-                            str(row.get("signal") or row.get("side") or "BUY"),
-                            str(row.get("status") or "OPEN"),
-                            str(row.get("status_info") or ""),
-                            str(row.get("strategy_version") or "unknown"),
-                            str(row.get("reason") or ""),
-                            str(row.get("updated_at") or ""),
-                        )
-                    )
-                except Exception:
-                    continue
-
-            if not rows:
-                continue
-
-            with self._connect() as conn:
-                conn.executemany(
-                    """
-                    INSERT OR IGNORE INTO signals
-                    (id, ticker, timestamp, entry_price, tp, sl, signal, status, status_info, strategy_version, reason, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    rows,
-                )
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_signals_ticker_status ON signals(ticker, status)")
 
     def save_signal_dict(self, signal: dict) -> dict:
         ticker = signal["ticker"]
@@ -116,22 +61,22 @@ class SignalStorage:
         record = {
             "id": signal.get("id", str(uuid.uuid4())),
             "ticker": ticker,
-            "timestamp": signal.get("timestamp", datetime.now(timezone.utc).isoformat()),
+            "timestamp": str(signal.get("timestamp", datetime.now(timezone.utc).isoformat())),
             "entry_price": float(entry),
             "tp": float(signal["tp"]),
             "sl": float(signal["sl"]),
-            "signal": signal.get("signal", signal.get("side", "BUY")),
-            "status": signal.get("status", "OPEN"),
-            "status_info": signal.get("status_info", ""),
-            "strategy_version": signal.get("strategy_version", "unknown"),
-            "reason": signal.get("reason", ""),
-            "updated_at": signal.get("updated_at", ""),
+            "signal": str(signal.get("signal", signal.get("side", "BUY"))),
+            "status": str(signal.get("status", "OPEN")),
+            "status_info": str(signal.get("status_info", "")),
+            "strategy_version": str(signal.get("strategy_version", "unknown")),
+            "reason": str(signal.get("reason", "")),
+            "updated_at": str(signal.get("updated_at", "")),
         }
 
         with self._connect() as conn:
             conn.execute(
                 """
-                INSERT INTO signals
+                INSERT OR IGNORE INTO signals
                 (id, ticker, timestamp, entry_price, tp, sl, signal, status, status_info, strategy_version, reason, updated_at)
                 VALUES (:id, :ticker, :timestamp, :entry_price, :tp, :sl, :signal, :status, :status_info, :strategy_version, :reason, :updated_at)
                 """,
