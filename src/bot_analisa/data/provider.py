@@ -53,7 +53,11 @@ class DataProvider:
         if path.exists():
             cached = pd.read_csv(path)
             return self._ensure_datetime_column(cached)
-        return self._download_yfinance(ticker, period=period, interval=interval)
+
+        downloaded = self._download_yfinance(ticker, period=period, interval=interval)
+        if not downloaded.empty:
+            downloaded.to_csv(path, index=False)
+        return downloaded
 
     def fetch_and_save(self, ticker: str, period: str = "1y", interval: str = "1d", force: bool = False) -> Optional[str]:
         new_df = self._download_yfinance(ticker, period=period, interval=interval)
